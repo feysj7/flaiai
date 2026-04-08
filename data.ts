@@ -1,40 +1,64 @@
-import { type } from 'arktype';
+import 'reflect-metadata';
+import { Type } from 'class-transformer';
+import {
+  IsEmail,
+  IsNotEmpty,
+  Length,
+  Matches,
+  Max,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { Field, InternalFieldName } from 'react-hook-form';
 
-export const schema = type({
-  username: 'string>2',
-  password: '/.*[A-Za-z].*/>8|/.*\\d.*/',
-  repeatPassword: 'string>1',
-  accessToken: 'string|number',
-  birthYear: '1900<number<2013',
-  email: 'email',
-  tags: 'string[]',
-  enabled: 'boolean',
-  url: 'string>1',
-  'like?': type({
-    id: 'number',
-    name: 'string>3',
-  }).array(),
-  dateStr: 'Date',
-});
+class Like {
+  @IsNotEmpty()
+  id: number;
 
-export const validData: typeof schema.infer = {
+  @Length(4)
+  name: string;
+}
+
+export class Schema {
+  @Matches(/^\w+$/)
+  @Length(3, 30)
+  username: string;
+
+  @Matches(/^[a-zA-Z0-9]{3,30}/)
+  password: string;
+
+  @Min(1900)
+  @Max(2013)
+  birthYear: number;
+
+  @IsEmail()
+  email: string;
+
+  accessToken: string;
+
+  tags: string[];
+
+  enabled: boolean;
+
+  @ValidateNested({ each: true })
+  @Type(() => Like)
+  like: Like[];
+}
+
+export const validData: Schema = {
   username: 'Doe',
-  password: 'Password123_',
-  repeatPassword: 'Password123_',
+  password: 'Password123',
   birthYear: 2000,
   email: 'john@doe.com',
   tags: ['tag1', 'tag2'],
   enabled: true,
   accessToken: 'accessToken',
-  url: 'https://react-hook-form.com/',
   like: [
     {
       id: 1,
       name: 'name',
     },
   ],
-  dateStr: new Date('2020-01-01'),
 };
 
 export const invalidData = {
@@ -42,7 +66,6 @@ export const invalidData = {
   email: '',
   birthYear: 'birthYear',
   like: [{ id: 'z' }],
-  url: 'abc',
 };
 
 export const fields: Record<InternalFieldName, Field['_f']> = {

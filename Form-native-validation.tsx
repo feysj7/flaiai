@@ -1,24 +1,25 @@
 import { render, screen } from '@testing-library/react';
 import user from '@testing-library/user-event';
-import { type } from 'arktype';
+import { IsNotEmpty } from 'class-validator';
 import React from 'react';
-import { useForm } from 'react-hook-form';
-import { arktypeResolver } from '..';
+import { SubmitHandler, useForm } from 'react-hook-form';
+import { classValidatorResolver } from '..';
 
-const schema = type({
-  username: 'string>1',
-  password: 'string>1',
-});
+class Schema {
+  @IsNotEmpty()
+  username: string;
 
-type FormData = typeof schema.infer;
+  @IsNotEmpty()
+  password: string;
+}
 
 interface Props {
-  onSubmit: (data: FormData) => void;
+  onSubmit: SubmitHandler<Schema>;
 }
 
 function TestComponent({ onSubmit }: Props) {
-  const { register, handleSubmit } = useForm<FormData>({
-    resolver: arktypeResolver(schema),
+  const { register, handleSubmit } = useForm<Schema>({
+    resolver: classValidatorResolver(Schema),
     shouldUseNativeValidation: true,
   });
 
@@ -33,7 +34,7 @@ function TestComponent({ onSubmit }: Props) {
   );
 }
 
-test("form's native validation with Zod", async () => {
+test("form's native validation with Class Validator", async () => {
   const handleSubmit = vi.fn();
   render(<TestComponent onSubmit={handleSubmit} />);
 
@@ -56,16 +57,12 @@ test("form's native validation with Zod", async () => {
   // username
   usernameField = screen.getByPlaceholderText(/username/i) as HTMLInputElement;
   expect(usernameField.validity.valid).toBe(false);
-  expect(usernameField.validationMessage).toBe(
-    'username must be more than length 1',
-  );
+  expect(usernameField.validationMessage).toBe('username should not be empty');
 
   // password
   passwordField = screen.getByPlaceholderText(/password/i) as HTMLInputElement;
   expect(passwordField.validity.valid).toBe(false);
-  expect(passwordField.validationMessage).toBe(
-    'password must be more than length 1',
-  );
+  expect(passwordField.validationMessage).toBe('password should not be empty');
 
   await user.type(screen.getByPlaceholderText(/username/i), 'joe');
   await user.type(screen.getByPlaceholderText(/password/i), 'password');

@@ -1,2 +1,2 @@
-export * from './arktype';
+export * from './computed-types';
 export * from './types';

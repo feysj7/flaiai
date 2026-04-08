@@ -1,28 +1,29 @@
 import { render, screen } from '@testing-library/react';
 import user from '@testing-library/user-event';
-import { type } from 'arktype';
+import { IsNotEmpty } from 'class-validator';
 import React from 'react';
-import { useForm } from 'react-hook-form';
-import { arktypeResolver } from '..';
+import { SubmitHandler, useForm } from 'react-hook-form';
+import { classValidatorResolver } from '..';
 
-const schema = type({
-  username: 'string>1',
-  password: 'string>1',
-});
+class Schema {
+  @IsNotEmpty()
+  username: string;
 
-type FormData = typeof schema.infer & { unusedProperty: string };
+  @IsNotEmpty()
+  password: string;
+}
 
 interface Props {
-  onSubmit: (data: FormData) => void;
+  onSubmit: SubmitHandler<Schema>;
 }
 
 function TestComponent({ onSubmit }: Props) {
   const {
     register,
-    handleSubmit,
     formState: { errors },
-  } = useForm<FormData>({
-    resolver: arktypeResolver(schema), // Useful to check TypeScript regressions
+    handleSubmit,
+  } = useForm<Schema>({
+    resolver: classValidatorResolver(Schema),
   });
 
   return (
@@ -38,7 +39,7 @@ function TestComponent({ onSubmit }: Props) {
   );
 }
 
-test("form's validation with arkType and TypeScript's integration", async () => {
+test("form's validation with Class Validator and TypeScript's integration", async () => {
   const handleSubmit = vi.fn();
   render(<TestComponent onSubmit={handleSubmit} />);
 
@@ -46,11 +47,7 @@ test("form's validation with arkType and TypeScript's integration", async () => 
 
   await user.click(screen.getByText(/submit/i));
 
-  expect(
-    screen.getByText('username must be more than length 1 (was 0)'),
-  ).toBeInTheDocument();
-  expect(
-    screen.getByText('password must be more than length 1 (was 0)'),
-  ).toBeInTheDocument();
+  expect(screen.getByText(/username should not be empty/i)).toBeInTheDocument();
+  expect(screen.getByText(/password should not be empty/i)).toBeInTheDocument();
   expect(handleSubmit).not.toHaveBeenCalled();
 });

@@ -1,67 +1,188 @@
-import { toNestErrors, validateFieldsNatively } from '@hookform/resolvers';
-import { plainToClass } from 'class-transformer';
-import { ValidationError, validate, validateSync } from 'class-validator';
-import { FieldErrors } from 'react-hook-form';
-import type { Resolver } from './types';
+import { Expose, Type } from 'class-transformer';
+import * as classValidator from 'class-validator';
+import { IsDefined, IsNumber, Max, Min } from 'class-validator';
+/* eslint-disable no-console, @typescript-eslint/ban-ts-comment */
+import { classValidatorResolver } from '..';
+import { Schema, fields, invalidData, validData } from './__fixtures__/data';
 
-const parseErrors = (
-  errors: ValidationError[],
-  validateAllFieldCriteria: boolean,
-  parsedErrors: FieldErrors = {},
-  path = '',
-) => {
-  return errors.reduce((acc, error) => {
-    const _path = path ? `${path}.${error.property}` : error.property;
+const shouldUseNativeValidation = false;
 
-    if (error.constraints) {
-      const key = Object.keys(error.constraints)[0];
-      acc[_path] = {
-        type: key,
-        message: error.constraints[key],
-      };
+describe('classValidatorResolver', () => {
+  it('should return values from classValidatorResolver when validation pass', async () => {
+    const schemaSpy = vi.spyOn(classValidator, 'validate');
+    const schemaSyncSpy = vi.spyOn(classValidator, 'validateSync');
 
-      const _e = acc[_path];
-      if (validateAllFieldCriteria && _e) {
-        Object.assign(_e, { types: error.constraints });
-      }
-    }
+    const result = await classValidatorResolver(Schema)(validData, undefined, {
+      fields,
+      shouldUseNativeValidation,
+    });
 
-    if (error.children && error.children.length) {
-      parseErrors(error.children, validateAllFieldCriteria, acc, _path);
-    }
+    expect(schemaSpy).toHaveBeenCalledTimes(1);
+    expect(schemaSyncSpy).not.toHaveBeenCalled();
+    expect(result).toEqual({ errors: {}, values: validData });
+    expect(result.values).toBeInstanceOf(Schema);
+  });
 
-    return acc;
-  }, parsedErrors);
-};
+  it('should return values as a raw object from classValidatorResolver when `rawValues` set to true', async () => {
+    const result = await classValidatorResolver(Schema, undefined, {
+      rawValues: true,
+    })(validData, undefined, {
+      fields,
+      shouldUseNativeValidation,
+    });
 
-export const classValidatorResolver: Resolver =
-  (schema, schemaOptions = {}, resolverOptions = {}) =>
-  async (values, _, options) => {
-    const { transformer, validator } = schemaOptions;
-    const data = plainToClass(schema, values, transformer);
+    expect(result).toEqual({ errors: {}, values: validData });
+    expect(result.values).not.toBeInstanceOf(Schema);
+  });
 
-    const rawErrors = await (resolverOptions.mode === 'sync'
-      ? validateSync
-      : validate)(data, validator);
+  it('should return values from classValidatorResolver with `mode: sync` when validation pass', async () => {
+    const validateSyncSpy = vi.spyOn(classValidator, 'validateSync');
+    const validateSpy = vi.spyOn(classValidator, 'validate');
 
-    if (rawErrors.length) {
-      return {
-        values: {},
-        errors: toNestErrors(
-          parseErrors(
-            rawErrors,
-            !options.shouldUseNativeValidation &&
-              options.criteriaMode === 'all',
-          ),
-          options,
-        ),
-      };
-    }
+    const result = await classValidatorResolver(Schema, undefined, {
+      mode: 'sync',
+    })(validData, undefined, { fields, shouldUseNativeValidation });
 
-    options.shouldUseNativeValidation && validateFieldsNatively({}, options);
+    expect(validateSyncSpy).toHaveBeenCalledTimes(1);
+    expect(validateSpy).not.toHaveBeenCalled();
+    expect(result).toEqual({ errors: {}, values: validData });
+    expect(result.values).toBeInstanceOf(Schema);
+  });
 
-    return {
-      values: resolverOptions.rawValues ? values : data,
-      errors: {},
-    };
-  };
+  it('should return a single error from classValidatorResolver when validation fails', async () => {
+    const result = await classValidatorResolver(Schema)(
+      invalidData,
+      undefined,
+      {
+        fields,
+        shouldUseNativeValidation,
+      },
+    );
+
+    expect(result).toMatchSnapshot();
+  });
+
+  it('should return a single error from classValidatorResolver with `mode: sync` when validation fails', async () => {
+    const validateSyncSpy = vi.spyOn(classValidator, 'validateSync');
+    const validateSpy = vi.spyOn(classValidator, 'validate');
+
+    const result = await classValidatorResolver(Schema, undefined, {
+      mode: 'sync',
+    })(invalidData, undefined, { fields, shouldUseNativeValidation });
+
+    expect(validateSyncSpy).toHaveBeenCalledTimes(1);
+    expect(validateSpy).not.toHaveBeenCalled();
+    expect(result).toMatchSnapshot();
+  });
+
+  it('should return all the errors from classValidatorResolver when validation fails with `validateAllFieldCriteria` set to true', async () => {
+    const result = await classValidatorResolver(Schema)(
+      invalidData,
+      undefined,
+      {
+        fields,
+        criteriaMode: 'all',
+        shouldUseNativeValidation,
+      },
+    );
+
+    expect(result).toMatchSnapshot();
+  });
+
+  it('should return all the errors from classValidatorResolver when validation fails with `validateAllFieldCriteria` set to true and `mode: sync`', async () => {
+    const result = await classValidatorResolver(Schema, undefined, {
+      mode: 'sync',
+    })(invalidData, undefined, {
+      fields,
+      criteriaMode: 'all',
+      shouldUseNativeValidation,
+    });
+
+    expect(result).toMatchSnapshot();
+  });
+});
+
+it('validate data with transformer option', async () => {
+  class SchemaTest {
+    @Expose({ groups: ['find', 'create', 'update'] })
+    @Type(() => Number)
+    @IsDefined({
+      message: `All fields must be defined.`,
+      groups: ['publish'],
+    })
+    @IsNumber({}, { message: `Must be a number`, always: true })
+    @Min(0, { message: `Cannot be lower than 0`, always: true })
+    @Max(255, { message: `Cannot be greater than 255`, always: true })
+    random: number;
+  }
+
+  const result = await classValidatorResolver(
+    SchemaTest,
+    { transformer: { groups: ['update'] } },
+    {
+      mode: 'sync',
+    },
+  )(invalidData, undefined, {
+    fields,
+    criteriaMode: 'all',
+    shouldUseNativeValidation,
+  });
+
+  expect(result).toMatchSnapshot();
+});
+
+it('validate data with validator option', async () => {
+  class SchemaTest {
+    @Expose({ groups: ['find', 'create', 'update'] })
+    @Type(() => Number)
+    @IsDefined({
+      message: `All fields must be defined.`,
+      groups: ['publish'],
+    })
+    @IsNumber({}, { message: `Must be a number`, always: true })
+    @Min(0, { message: `Cannot be lower than 0`, always: true })
+    @Max(255, { message: `Cannot be greater than 255`, always: true })
+    random: number;
+  }
+
+  const result = await classValidatorResolver(
+    SchemaTest,
+    { validator: { stopAtFirstError: true } },
+    {
+      mode: 'sync',
+    },
+  )(invalidData, undefined, {
+    fields,
+    criteriaMode: 'all',
+    shouldUseNativeValidation,
+  });
+
+  expect(result).toMatchSnapshot();
+});
+
+it('should return from classValidatorResolver with `excludeExtraneousValues` set to true', async () => {
+  class SchemaTest {
+    @Expose()
+    @IsNumber({}, { message: `Must be a number`, always: true })
+    random: number;
+  }
+
+  const result = await classValidatorResolver(SchemaTest, {
+    transformer: {
+      excludeExtraneousValues: true,
+    },
+  })(
+    {
+      random: 10,
+      extraneousField: true,
+    },
+    undefined,
+    {
+      fields,
+      shouldUseNativeValidation,
+    },
+  );
+
+  expect(result).toEqual({ errors: {}, values: { random: 10 } });
+  expect(result.values).toBeInstanceOf(SchemaTest);
+});
