@@ -1,29 +1,16 @@
 import { render, screen } from '@testing-library/react';
 import user from '@testing-library/user-event';
-import { JSONSchemaType } from 'ajv';
+import { type } from 'arktype';
 import React from 'react';
 import { useForm } from 'react-hook-form';
-import { ajvResolver } from '..';
+import { arktypeResolver } from '..';
 
-type FormData = { username: string; password: string };
+const schema = type({
+  username: 'string>1',
+  password: 'string>1',
+});
 
-const schema: JSONSchemaType<FormData> = {
-  type: 'object',
-  properties: {
-    username: {
-      type: 'string',
-      minLength: 1,
-      errorMessage: { minLength: 'username field is required' },
-    },
-    password: {
-      type: 'string',
-      minLength: 1,
-      errorMessage: { minLength: 'password field is required' },
-    },
-  },
-  required: ['username', 'password'],
-  additionalProperties: false,
-};
+type FormData = typeof schema.infer & { unusedProperty: string };
 
 interface Props {
   onSubmit: (data: FormData) => void;
@@ -32,10 +19,10 @@ interface Props {
 function TestComponent({ onSubmit }: Props) {
   const {
     register,
-    formState: { errors },
     handleSubmit,
+    formState: { errors },
   } = useForm<FormData>({
-    resolver: ajvResolver(schema), // Useful to check TypeScript regressions
+    resolver: arktypeResolver(schema), // Useful to check TypeScript regressions
   });
 
   return (
@@ -51,7 +38,7 @@ function TestComponent({ onSubmit }: Props) {
   );
 }
 
-test("form's validation with Ajv and TypeScript's integration", async () => {
+test("form's validation with arkType and TypeScript's integration", async () => {
   const handleSubmit = vi.fn();
   render(<TestComponent onSubmit={handleSubmit} />);
 
@@ -59,7 +46,11 @@ test("form's validation with Ajv and TypeScript's integration", async () => {
 
   await user.click(screen.getByText(/submit/i));
 
-  expect(screen.getByText(/username field is required/i)).toBeInTheDocument();
-  expect(screen.getByText(/password field is required/i)).toBeInTheDocument();
+  expect(
+    screen.getByText('username must be more than length 1 (was 0)'),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText('password must be more than length 1 (was 0)'),
+  ).toBeInTheDocument();
   expect(handleSubmit).not.toHaveBeenCalled();
 });

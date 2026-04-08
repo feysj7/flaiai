@@ -1,2 +1,2 @@
-export * from './ajv';
+export * from './arktype';
 export * from './types';

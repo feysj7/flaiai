@@ -1,32 +1,16 @@
 import { render, screen } from '@testing-library/react';
 import user from '@testing-library/user-event';
-import { JSONSchemaType } from 'ajv';
+import { type } from 'arktype';
 import React from 'react';
 import { useForm } from 'react-hook-form';
-import { ajvResolver } from '..';
+import { arktypeResolver } from '..';
 
-const USERNAME_REQUIRED_MESSAGE = 'username field is required';
-const PASSWORD_REQUIRED_MESSAGE = 'password field is required';
+const schema = type({
+  username: 'string>1',
+  password: 'string>1',
+});
 
-type FormData = { username: string; password: string };
-
-const schema: JSONSchemaType<FormData> = {
-  type: 'object',
-  properties: {
-    username: {
-      type: 'string',
-      minLength: 1,
-      errorMessage: { minLength: USERNAME_REQUIRED_MESSAGE },
-    },
-    password: {
-      type: 'string',
-      minLength: 1,
-      errorMessage: { minLength: PASSWORD_REQUIRED_MESSAGE },
-    },
-  },
-  required: ['username', 'password'],
-  additionalProperties: false,
-};
+type FormData = typeof schema.infer;
 
 interface Props {
   onSubmit: (data: FormData) => void;
@@ -34,7 +18,7 @@ interface Props {
 
 function TestComponent({ onSubmit }: Props) {
   const { register, handleSubmit } = useForm<FormData>({
-    resolver: ajvResolver(schema),
+    resolver: arktypeResolver(schema),
     shouldUseNativeValidation: true,
   });
 
@@ -49,7 +33,7 @@ function TestComponent({ onSubmit }: Props) {
   );
 }
 
-test("form's native validation with Ajv", async () => {
+test("form's native validation with Zod", async () => {
   const handleSubmit = vi.fn();
   render(<TestComponent onSubmit={handleSubmit} />);
 
@@ -72,12 +56,16 @@ test("form's native validation with Ajv", async () => {
   // username
   usernameField = screen.getByPlaceholderText(/username/i) as HTMLInputElement;
   expect(usernameField.validity.valid).toBe(false);
-  expect(usernameField.validationMessage).toBe(USERNAME_REQUIRED_MESSAGE);
+  expect(usernameField.validationMessage).toBe(
+    'username must be more than length 1',
+  );
 
   // password
   passwordField = screen.getByPlaceholderText(/password/i) as HTMLInputElement;
   expect(passwordField.validity.valid).toBe(false);
-  expect(passwordField.validationMessage).toBe(PASSWORD_REQUIRED_MESSAGE);
+  expect(passwordField.validationMessage).toBe(
+    'password must be more than length 1',
+  );
 
   await user.type(screen.getByPlaceholderText(/username/i), 'joe');
   await user.type(screen.getByPlaceholderText(/password/i), 'password');
