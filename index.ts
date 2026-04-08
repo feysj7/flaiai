@@ -1,2 +1,2 @@
-export * from './arktype';
+export * from './class-validator';
 export * from './types';
